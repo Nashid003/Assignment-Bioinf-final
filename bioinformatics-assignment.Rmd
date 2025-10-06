@@ -1,0 +1,317 @@
+---
+title: "Bioinformatics assignment"
+author: "Nashid"
+date: "2025-10-06"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+
+Part 1: Importing Files, Data Wrangling, Mathematical Operations, Plots
+The purpose of Part 1 is to analyze "gene_expression.tsv" (RNA-seq count data) and "growth_data.csv" (tree circumference measurements at control and treatment sites). Files were downloaded from https://github.com/ghazkha/Assessment4.git using download.file() in R.
+
+1. Read in the gene_expression.tsv file, making gene identifiers row names. Show a table of values for the first six genes.
+To solve this, I used read.table() to import the TSV file, specifying header=TRUE for column names, stringsAsFactors=FALSE to avoid factor conversion, and row.names=1 to set gene IDs as row names. The head() function displays the first six rows.
+```{r}
+URL = "https://raw.githubusercontent.com/ghazkha/Assessment4/main/gene_expression.tsv"
+download.file(URL, destfile = "gene_expression.tsv")
+gene_expr <- read.table("gene_expression.tsv", stringsAsFactors = FALSE, header=TRUE, row.names=1)
+head(gene_expr, 6)
+```
+The table shows expression values for the first six genes across three samples.
+
+
+2. Make a new column for the mean of the other columns. Show a table of values for the first six genes.
+I calculated the mean expression per gene using rowMeans() and added it as a new column mean_expr. head() displays the updated table for the first six genes.
+```{r}
+gene_expr$mean_expr <- rowMeans(gene_expr)
+head(gene_expr, 6)
+```
+This adds the average expression, useful for identifying highly expressed genes.
+
+
+3. List the 10 genes with the highest mean expression.
+To find the top genes, I sorted the data frame by mean_expr in descending order using order() and selected the row names of the first 10 rows.
+```{r}
+gene_expr_sorted <- gene_expr[order(gene_expr$mean_expr, decreasing = TRUE), ]
+top_10_genes <- rownames(gene_expr_sorted[1:10, ])
+top_10_genes
+```
+These are the most highly expressed genes based on mean values.
+
+
+4. Determine the number of genes with a mean <10.
+I used sum() on the logical vector gene_expr$mean_expr < 10 to count low-expression genes.
+```{r}
+low_expr_genes <- sum(gene_expr$mean_expr < 10)
+low_expr_genes
+```
+This quantifies genes with low mean expression.
+
+
+5. Make a histogram plot of the mean values.
+The histogram was created using hist() to visualize the distribution of mean expression values.
+```{r}
+hist(gene_expr$mean_expr, main = "Histogram of Mean Gene Expression", xlab = "Mean Expression")
+```
+The plot shows the frequency distribution, potentially indicating a skewed pattern typical in gene expression data.
+
+
+6. Import “growth_data.csv” into an R object. What are the column names?
+I imported the CSV using read.table() with sep="," and displayed column names with colnames().
+```{r}
+URL = "https://raw.githubusercontent.com/ghazkha/Assessment4/main/growth_data.csv"
+download.file(URL, destfile = "growth_data.csv")
+growth_data <- read.table("growth_data.csv", sep=",", stringsAsFactors = FALSE, header=TRUE)
+colnames(growth_data)
+```
+The columns include tree ID, site, and circumference measurements over years.
+
+
+7. Calculate the mean and standard deviation of tree circumference at the start and end of the study at both sites.
+I used tapply() to compute means and standard deviations grouped by Site for 2005 and 2020 circumferences.
+```{r}
+mean_start <- tapply(growth_data$Circumf_2005_cm, growth_data$Site, mean)
+sd_start <- tapply(growth_data$Circumf_2005_cm, growth_data$Site, sd)
+mean_end <- tapply(growth_data$Circumf_2020_cm, growth_data$Site, mean)
+sd_end <- tapply(growth_data$Circumf_2020_cm, growth_data$Site, sd)
+mean_start
+sd_start
+mean_end
+sd_end
+```
+These statistics summarize initial and final tree sizes, showing variability between sites.
+
+
+8. Make a box plot of tree circumference at the start and end of the study at both sites.
+Boxplots were generated using boxplot() with formulas grouping by Site.
+```{r}
+boxplot(Circumf_2005_cm ~ Site, data = growth_data, main = "Tree Circumference in 2005 by Site", ylab = "Circumference (cm)")
+boxplot(Circumf_2020_cm ~ Site, data = growth_data, main = "Tree Circumference in 2020 by Site", ylab = "Circumference (cm)")
+```
+The plots compare distributions, highlighting medians and outliers.
+
+
+9. Calculate the mean growth over the last 10 years at each site.
+I computed growth as the difference between 2020 and 2010 circumferences, then used tapply() for site means.
+```{r}
+growth_data$last10_growth <- growth_data$Circumf_2020_cm - growth_data$Circumf_2010_cm
+mean_last10 <- tapply(growth_data$last10_growth, growth_data$Site, mean)
+mean_last10
+```
+This measures recent growth, potentially differing by site.
+
+
+10. Use the t.test to estimate the p-value that the 10 year growth is different at the two sites.
+A two-sample t-test was performed using t.test() on growth grouped by Site.
+```{r}
+t.test(last10_growth ~ Site, data = growth_data)
+```
+The p-value indicates if growth differences are statistically significant, suggesting treatment effects if low.
+
+
+
+
+
+
+
+Part 2: Examining Biological Sequence Diversity
+```{r}
+suppressPackageStartupMessages({
+  library("R.utils")
+  library("seqinr")
+})
+```
+
+
+Part 2 compares sequence features of E. coli (model bacterium) and C. baratii (pathogenic Clostridium) using coding DNA sequences from Ensembl Genomes.
+1. Number of coding sequences in E. coli and C. baratii. Present in table. Describe differences.
+FASTA files were downloaded, unzipped, and read with read.fasta(). Sequence count used length().
+```{r}
+# E. coli
+url_ecoli <- "https://ftp.ensemblgenomes.ebi.ac.uk/pub/bacteria/release-62/fasta/bacteria_0_collection/escherichia_coli_str_k_12_substr_mg1655_gca_000005845/cds/Escherichia_coli_str_k_12_substr_mg1655_gca_000005845.ASM584v2.cds.all.fa.gz"
+download.file(url_ecoli, "ecoli_cds.fa.gz")
+gunzip("ecoli_cds.fa.gz", overwrite = TRUE)
+cds_ecoli <- read.fasta("ecoli_cds.fa")
+num_ecoli <- length(cds_ecoli)
+
+# C. baratii
+url_cbar <- "https://ftp.ensemblgenomes.ebi.ac.uk/pub/bacteria/release-62/fasta/bacteria_14_collection/clostridium_baratii_gca_001405755/cds/Clostridium_baratii_gca_001405755.14207_7_79.cds.all.fa.gz"
+download.file(url_cbar, "cbar_cds.fa.gz")
+gunzip("cbar_cds.fa.gz", overwrite = TRUE)
+cds_cbar <- read.fasta("cbar_cds.fa")
+num_cbar <- length(cds_cbar)
+
+# Table (using part of the code from Q2)
+coding_dna_table <- data.frame(
+  Organism = c("E. coli", "C. baratii"),
+  Number_of_CDS = c(num_ecoli, num_cbar)
+)
+coding_dna_table
+```
+As shown, E. coli has more coding sequences than C. baratii, reflecting a larger, more versatile genome versus the specialized pathogen.
+
+
+2. How much coding DNA is there in total for these two organisms? Present in table. Describe differences.
+Sequence lengths were summed using sapply() and sum().
+```{r}
+# Calculate total coding DNA length for each organism
+len_ecoli <- sapply(cds_ecoli, length)
+len_cbar <- sapply(cds_cbar, length)
+
+total_ecoli <- sum(len_ecoli)
+total_cbar <- sum(len_cbar)
+
+# Present in a table
+coding_dna_table <- data.frame(
+  Organism = c("E. coli", "C. baratii"),
+  Number_of_CDS = c(length(cds_ecoli), length(cds_cbar)),
+  Total_Coding_DNA_bp = c(total_ecoli, total_cbar)
+)
+
+coding_dna_table
+```
+E. coli has more total coding DNA, consistent with its larger genome and higher gene count.
+
+
+3. Calculate the length of all coding sequences in these organisms. Make a boxplot of coding sequence length in these organisms. What is the mean and median coding sequence length of these two organisms? Describe any differences.
+Lengths were calculated, boxplotted with boxplot(), and summary stats with mean() and median().
+```{r}
+boxplot(len_ecoli, len_cbar, names = c("E. coli", "C. baratii"), main = "Coding Sequence Lengths", ylab = "Length (bp)")
+mean_ecoli <- mean(len_ecoli)
+median_ecoli <- median(len_ecoli)
+mean_cbar <- mean(len_cbar)
+median_cbar <- median(len_cbar)
+mean_ecoli; median_ecoli
+mean_cbar; median_cbar
+```
+E. coli shows longer mean and median CDS lengths, possibly due to more complex proteins; differences may reflect evolutionary adaptations.
+
+
+4. Calculate the frequency of DNA bases in the total coding sequences for both organisms. Perform the same calculation for the total protein sequence. Create bar plots for nucleotide and amino acid frequency. Describe any differences between the two organisms.
+Sequences were unlisted, frequencies counted with count(), and barplots created. Proteins translated with translate().
+```{r}
+# Nucleotide
+dna_ecoli <- unlist(cds_ecoli)
+nuc_ecoli <- count(dna_ecoli, 1)
+barplot(nuc_ecoli, main = "E. coli Nucleotide Frequency", xlab = "Nucleotide", ylab = "Frequency")
+dna_cbar <- unlist(cds_cbar)
+nuc_cbar <- count(dna_cbar, 1)
+barplot(nuc_cbar, main = "C. baratii Nucleotide Frequency", xlab = "Nucleotide", ylab = "Frequency")
+
+# Amino acid
+prot_ecoli <- lapply(cds_ecoli, translate)
+aa <- s2c("acdefghiklmnpqrstvwy")
+aa_ecoli <- count(unlist(prot_ecoli), 1, alphabet=aa)
+barplot(aa_ecoli, main = "E. coli Amino Acid Frequency", xlab = "Amino Acid", ylab = "Frequency")
+prot_cbar <- lapply(cds_cbar, translate)
+aa_cbar <- count(unlist(prot_cbar), 1, alphabet=aa)
+barplot(aa_cbar, main = "C. baratii Amino Acid Frequency", xlab = "Amino Acid", ylab = "Frequency")
+```
+E. coli has balanced nucleotide frequencies (GC ~50%), while C. baratii may have lower GC, affecting amino acid usage (e.g., more AT-rich codons leading to different residues).
+
+
+5. Create a codon usage table and quantify the codon usage bias among all coding sequences. Describe any differences between the two organisms with respect to their codon usage bias. Provide charts to support your observations.
+Codon usage was computed with uco() using RSCU index, and barplots shown.
+```{r}
+codon_ecoli <- uco(unlist(cds_ecoli), index="rscu", as.data.frame=TRUE)
+barplot(codon_ecoli$RSCU, names.arg=codon_ecoli$codon, main="E. coli Codon RSCU", xlab="Codon", ylab="RSCU")
+codon_cbar <- uco(unlist(cds_cbar), index="rscu", as.data.frame=TRUE)
+barplot(codon_cbar$RSCU, names.arg=codon_cbar$codon, main="C. baratii Codon RSCU", xlab="Codon", ylab="RSCU")
+```
+Differences in RSCU indicate codon bias; E. coli shows bias toward optimal codons for high expression, while C. baratii may reflect its lower GC content and niche adaptation.
+
+
+6. In the organism of interest (C. baratii), identify 10 protein sequence k-mers of length 3-5 which are the most over- and under-represented k-mers in your organism of interest. Are these k-mers also over- and under-represented in E. coli to a similar extent? Provide plots to support your observations. Why do you think these sequences are present at different levels in the genomes of these organisms?
+Proteins were translated, k-mers counted with count() for k=3-5. Top/bottom 10 sorted, plotted, and compared.
+```{r kmer_analysis, error=TRUE, fig.height=14, fig.width=10}
+# Flatten proteins into single character vectors
+prots_cbar <- unlist(lapply(cds_cbar, translate))
+prots_ecoli <- unlist(lapply(cds_ecoli, translate))
+
+# Define amino acid alphabet (drop stop codons '*')
+aa <- unique(c(prots_cbar, prots_ecoli))
+aa <- aa[aa != "*"]
+
+# K=3, 4, 5 counts for C. baratii and E. coli
+k3_cbar <- count(prots_cbar, wordsize=3, alphabet=aa)
+k3_ecoli <- count(prots_ecoli, wordsize=3, alphabet=aa)
+k4_cbar <- count(prots_cbar, wordsize=4, alphabet=aa)
+k4_ecoli <- count(prots_ecoli, wordsize=4, alphabet=aa)
+k5_cbar <- count(prots_cbar, wordsize=5, alphabet=aa)
+k5_ecoli <- count(prots_ecoli, wordsize=5, alphabet=aa)
+
+# Check if counts are valid
+if (length(k3_cbar) == 0 || length(k4_cbar) == 0 || length(k5_cbar) == 0) {
+  cat("Error: No valid k-mer counts for C. baratii\n")
+} else {
+  # Set initial plot layout with adjusted margins
+  par(mfrow=c(2, 1), mar=c(8, 4, 4, 2)) # Increased bottom margin for rotated labels
+
+  # K=3, 4, 5: Top 10 over- and under-represented in C. baratii
+  top_over_cbar3 <- head(sort(k3_cbar, decreasing=TRUE), 10)
+  top_under_cbar3 <- head(sort(k3_cbar, decreasing=FALSE), 10)
+  top_over_cbar4 <- head(sort(k4_cbar, decreasing=TRUE), 10)
+  top_under_cbar4 <- head(sort(k4_cbar, decreasing=FALSE), 10)
+  top_over_cbar5 <- head(sort(k5_cbar, decreasing=TRUE), 10)
+  top_under_cbar5 <- head(sort(k5_cbar, decreasing=FALSE), 10)
+
+  # Plot K=3 for C. baratii
+  print("Top 10 over-represented 3-mers in C. baratii:")
+  print(top_over_cbar3)
+  barplot(as.numeric(top_over_cbar3), names.arg=names(top_over_cbar3), las=2, 
+          main="C. baratii Over-rep 3-mers", xlab="K-mer", ylab="Count", col="blue")
+  print("Top 10 under-represented 3-mers in C. baratii:")
+  print(top_under_cbar3)
+  barplot(as.numeric(top_under_cbar3), names.arg=names(top_over_cbar3), las=2, 
+          main="C. baratii Under-rep 3-mers", xlab="K-mer", ylab="Count", col="blue", 
+          ylim=c(0, max(top_under_cbar3) * 1.2)) # Dynamic ylim
+
+  # Reset layout for K=4 plots
+  par(mfrow=c(2, 1), mar=c(8, 4, 4, 2))
+  # Plot K=4 for C. baratii
+  print("Top 10 over-represented 4-mers in C. baratii:")
+  print(top_over_cbar4)
+  barplot(as.numeric(top_over_cbar4), names.arg=names(top_over_cbar4), las=2, 
+          main="C. baratii Over-rep 4-mers", xlab="K-mer", ylab="Count", col="blue")
+  print("Top 10 under-represented 4-mers in C. baratii:")
+  print(top_under_cbar4)
+  barplot(as.numeric(top_under_cbar4), names.arg=names(top_under_cbar4), las=2, 
+          main="C. baratii Under-rep 4-mers", xlab="K-mer", ylab="Count", col="blue", 
+          ylim=c(0, max(top_under_cbar4) * 1.2)) # Dynamic ylim
+
+  # Reset layout for K=5 plots
+  par(mfrow=c(2, 1), mar=c(8, 4, 4, 2))
+  # Plot K=5 for C. baratii
+  print("Top 10 over-represented 5-mers in C. baratii:")
+  print(top_over_cbar5)
+  barplot(as.numeric(top_over_cbar5), names.arg=names(top_over_cbar5), las=2, 
+          main="C. baratii Over-rep 5-mers", xlab="K-mer", ylab="Count", col="blue")
+  print("Top 10 under-represented 5-mers in C. baratii:")
+  print(top_under_cbar5)
+  barplot(as.numeric(top_under_cbar5), names.arg=names(top_under_cbar5), las=2, 
+          main="C. baratii Under-rep 5-mers", xlab="K-mer", ylab="Count", col="blue", 
+          ylim=c(0, max(top_under_cbar5) * 1.2)) # Dynamic ylim
+
+  # Reset layout for comparison plots
+  par(mfrow=c(2, 1), mar=c(8, 4, 4, 2))
+  # Compare with E. coli (K=3 as example)
+  print("C. baratii over-represented 3-mers in E. coli:")
+  print(k3_ecoli[names(top_over_cbar3)])
+  print("C. baratii under-represented 3-mers in E. coli:")
+  print(k3_ecoli[names(top_under_cbar3)])
+
+  # Comparison plots (K=3)
+  over_counts3 <- matrix(c(as.numeric(top_over_cbar3), ifelse(is.na(k3_ecoli[names(top_over_cbar3)]), 0, k3_ecoli[names(top_over_cbar3)])), 
+                        nrow=10, ncol=2, dimnames=list(names(top_over_cbar3), c("C. baratii", "E. coli")))
+  under_counts3 <- matrix(c(as.numeric(top_under_cbar3), ifelse(is.na(k3_ecoli[names(top_under_cbar3)]), 0, k3_ecoli[names(top_under_cbar3)])), 
+                         nrow=10, ncol=2, dimnames=list(names(top_under_cbar3), c("C. baratii", "E. coli")))
+  barplot(t(over_counts3), beside=TRUE, main="Comparison of C. baratii Over-rep 3-mers", 
+          xlab="K-mer", ylab="Count", col=c("blue", "red"), las=2, legend=c("C. baratii", "E. coli"))
+  barplot(t(under_counts3), beside=TRUE, main="Comparison of C. baratii Under-rep 3-mers", 
+          xlab="K-mer", ylab="Count", col=c("blue", "red"), las=2, legend=c("C. baratii", "E. coli"))
+}
+```
+The plots show over- and under-represented k-mers in C. baratii. Comparisons indicate differences in frequencies with E. coli, likely due to distinct protein functions, codon biases, and environmental adaptations—C. baratii may favor k-mers for toxin-related proteins, while E. coli emphasizes metabolic versatility.
